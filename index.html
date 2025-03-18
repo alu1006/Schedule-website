@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>拖曳式排班表 - 日期為列、員工為欄</title>
+    <title>拖曳式排班表 - 日期為列、員工為欄 (休假不算已排天數)</title>
     <style>
          :root {
             --primary-color: #4a6fa5;
@@ -242,7 +242,7 @@
 <body>
     <header>
         <div class="container">
-            <h1>拖曳式排班表 - 日期為列、員工為欄</h1>
+            <h1>拖曳式排班表 - 日期為列、員工為欄 (休假不算已排天數)</h1>
         </div>
     </header>
     <div class="container">
@@ -273,12 +273,12 @@
                         <div class="form-group">
                             <label for="staffSelect">員工:</label>
                             <select id="staffSelect">
-                <option value="Judy">Judy</option>
-                <option value="Pei">Pei</option>
-                <option value="Luna">Luna</option>
-                <option value="Claire">Claire</option>
-                <option value="Risky">Risky</option>
-              </select>
+                                <option value="Judy">Judy</option>
+                                <option value="Pei">Pei</option>
+                                <option value="Luna">Luna</option>
+                                <option value="Claire">Claire</option>
+                                <option value="Risky">Risky</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label for="requestDates">請假日期 (可複選):</label>
@@ -301,7 +301,7 @@
                                 </tr>
                             </thead>
                             <tbody id="specialRequestsList">
-                                <!-- 示範資料 -->
+                                <!-- 示範資料 (可以自行移除) -->
                                 <tr>
                                     <td>Judy</td>
                                     <td>4/11, 4/23</td>
@@ -461,6 +461,8 @@
                         <input type="month" id="month" value="2025-04">
                     </div>
                     <button type="button" class="btn" id="resetSchedule">重置排班表</button>
+                    <!-- 新增「自動排班」按鈕 -->
+                    <button type="button" class="btn btn-success" id="autoSchedule">自動排班</button>
                 </form>
                 <!-- 顯示各員工剩餘上班天數 -->
                 <div id="employeeStats">
@@ -481,7 +483,7 @@
             "Claire": [4, 5, 14],
             "Risky": [1, 11, 12, 27]
         };
-        // 每位員工允許的班別（點選循環不含「休假」，但點選循環會額外加入「休假」選項）
+        // 員工允許的班別
         const allowedShiftForEmployee = {
             "Judy": ["早班", "中班", "晚班"],
             "Pei": ["早班", "中班", "晚班"],
@@ -489,48 +491,57 @@
             "Claire": ["早班"],
             "Risky": ["夜班"]
         };
+        // 員工清單
         const employees = ["Judy", "Pei", "Luna", "Claire", "Risky"];
+        // 可能的班別 + 休假
         const shifts = ["早班", "中班", "晚班", "夜班", "休假"];
         const MAX_CONSECUTIVE = 6;
 
         // ──────────────────────────────
-        // 檢查指派規則 (拖曳用)
-        // (此處不檢查是否已有指派，以達成拖曳覆蓋效果)
+        // 判斷是否可排
+        // ──────────────────────────────
         function isValidAssignment(employee, shift, day) {
-            // 若非休假，檢查該員工是否允許該班別
+            // 若非休假，先檢查該員工是否允許
             if (shift !== "休假" && (!allowedShiftForEmployee[employee] || !allowedShiftForEmployee[employee].includes(shift))) {
                 alert(`${employee} 不允許指派 ${shift}`);
                 return false;
             }
-            // 檢查特殊休假需求
+            // 檢查特殊休假
             if (specialLeave[employee] && specialLeave[employee].includes(day)) {
                 alert(`${employee} 在 ${day} 號有特別休假`);
                 return false;
             }
+            // 檢查最大連續天數
             if (!checkMaxConsecutiveDays(employee, day)) {
                 alert(`${employee} 已連續上班達 ${MAX_CONSECUTIVE} 天`);
                 return false;
             }
+            // 檢查早晚接班規則
             if (shift !== "休假" && violatesShiftTransition(employee, shift, day)) {
                 alert(`${employee} 的班別轉換違規`);
                 return false;
             }
             return true;
         }
-        // 檢查連續上班天數（往前查找）
+        // 檢查連續上班天數
         function checkMaxConsecutiveDays(employee, day) {
             let count = 0;
             for (let d = day - 1; d >= 1; d--) {
                 const prevCell = document.querySelector(`td.droppable[data-day='${d}'][data-employee='${employee}']`);
                 if (prevCell && prevCell.getAttribute('data-assigned')) {
-                    count++;
+                    // 無論前一天是什麼班，只要有上班就計數
+                    // 休假不算
+                    if (prevCell.getAttribute('data-assigned') !== "休假") {
+                        count++;
+                    }
                 } else {
                     break;
                 }
             }
+            // 檢查是否超過上限
             return count < MAX_CONSECUTIVE;
         }
-        // 檢查隔天班別轉換：前一天早班與今天晚班或反之
+        // 檢查早晚接班
         function violatesShiftTransition(employee, shift, day) {
             if (day > 1) {
                 const prevCell = document.querySelector(`td.droppable[data-day='${day-1}'][data-employee='${employee}']`);
@@ -546,17 +557,16 @@
         }
 
         // ──────────────────────────────
-        // 設定指派（用於拖曳或點選後更新單元格）
+        // 指派班別
         // ──────────────────────────────
         function setAssignment(cell, employee, shift, day) {
             cell.innerHTML = `<strong draggable="true" class="assignment">${shift}</strong>`;
             cell.setAttribute('data-assigned', shift);
-            // 移除特殊休假鎖定標記（若有拖曳覆蓋特殊需求）
-            cell.removeAttribute('data-vacation');
+            cell.removeAttribute('data-vacation'); // 覆蓋特殊假
             const assignmentEl = cell.querySelector('.assignment');
             assignmentEl.addEventListener('dragstart', function(e) {
                 cell.removeAttribute('data-assigned');
-                // 當拖曳開始，若非特殊休假單元格則恢復點選提示
+                // 若不是特殊休假
                 if (!cell.getAttribute('data-vacation')) {
                     setTimeout(() => {
                         cell.innerHTML = `<span class="suggestion">點一下切換班別</span>`;
@@ -567,7 +577,7 @@
         }
 
         // ──────────────────────────────
-        // 為所有 droppable 單元格加入拖放事件
+        // 拖放事件
         // ──────────────────────────────
         function addDroppableListeners() {
             const cells = document.querySelectorAll('.droppable');
@@ -585,11 +595,12 @@
                     const shift = e.dataTransfer.getData("text/plain");
                     const employee = cell.getAttribute('data-employee');
                     const day = parseInt(cell.getAttribute('data-day'));
+                    // 檢查可否指派
                     if (!isValidAssignment(employee, shift, day)) return;
                     setAssignment(cell, employee, shift, day);
                     updateStaffRemainingDays();
                 });
-                // 雙擊清除（非特殊休假單元格）
+                // 雙擊清除
                 cell.addEventListener('dblclick', function() {
                     if (!cell.getAttribute('data-vacation')) {
                         cell.removeAttribute('data-assigned');
@@ -600,23 +611,20 @@
             });
         }
 
-        // ──────────────────────────────
-        // 為非特殊休假單元格加入點選「切換班別」事件（點選循環包含 allowedShiftForEmployee 加上「休假」）
-        // ──────────────────────────────
+        // 點選切換班別（休假不在 allowedShiftForEmployee，但要加到循環）
         function addClickCycleListener() {
             const cells = document.querySelectorAll('td.droppable');
             cells.forEach(cell => {
-                // 若非特殊休假單元格則設定點選事件（這邊用 onclick 以避免重複綁定）
                 if (!cell.getAttribute('data-vacation')) {
-                    cell.onclick = function(e) {
-                        let employee = cell.getAttribute('data-employee');
-                        // 取得該員工允許班別，並加上「休假」選項
+                    cell.onclick = function() {
+                        const employee = cell.getAttribute('data-employee');
+                        // 加上 '休假'
                         let allowed = (allowedShiftForEmployee[employee] || []).slice();
                         allowed.push("休假");
-                        let current = cell.getAttribute('data-assigned');
-                        let index = allowed.indexOf(current);
-                        let newIndex = (index === -1) ? 0 : (index + 1) % allowed.length;
-                        let newShift = allowed[newIndex];
+                        const current = cell.getAttribute('data-assigned');
+                        const index = allowed.indexOf(current);
+                        const newIndex = (index === -1) ? 0 : (index + 1) % allowed.length;
+                        const newShift = allowed[newIndex];
                         setAssignment(cell, employee, newShift, cell.getAttribute('data-day'));
                         updateStaffRemainingDays();
                     };
@@ -625,7 +633,7 @@
         }
 
         // ──────────────────────────────
-        // 建立排班表（列：日期、欄：員工）
+        // 建表：日期為列、員工為欄
         // ──────────────────────────────
         function buildScheduleTable() {
             const table = document.getElementById('scheduleTable');
@@ -634,7 +642,7 @@
             const daysInMonth = new Date(year, month, 0).getDate();
             document.getElementById('scheduleTitle').innerText = `${month} 月排班表`;
 
-            // 表頭：第一個儲存格顯示「日期/員工」，後續依序為各員工名稱
+            // 表頭：第一格是 "日期/員工"，其餘是員工名稱
             const thead = document.createElement('thead');
             const headerRow = document.createElement('tr');
             const thEmpty = document.createElement('th');
@@ -653,23 +661,26 @@
             for (let day = 1; day <= daysInMonth; day++) {
                 const tr = document.createElement('tr');
                 const dateObj = new Date(year, month - 1, day);
-                const dayOfWeek = dateObj.getDay(); // 0: 日, 6: 六
-                // 若為六日，設定淡紅色背景
+                const dayOfWeek = dateObj.getDay(); // 0:日,6:六
+                // 六日背景色
                 if (dayOfWeek === 0 || dayOfWeek === 6) {
                     tr.style.backgroundColor = "#ffcccc";
                 }
-                // 第一個儲存格：日期與星期
+
+                // 第1格：日期 (含星期)
                 const tdDate = document.createElement('td');
                 const weekText = ['日', '一', '二', '三', '四', '五', '六'][dayOfWeek];
                 tdDate.textContent = `${month}/${day} (${weekText})`;
                 tr.appendChild(tdDate);
-                // 依序為每位員工建立可指派單元格
+
+                // 其餘格：員工
                 employees.forEach(employee => {
                     const td = document.createElement('td');
                     td.classList.add('droppable');
                     td.setAttribute('data-day', day);
                     td.setAttribute('data-employee', employee);
-                    // 若該員工當日有特殊休假需求，直接呈現且鎖定
+
+                    // 若有特殊休假
                     if (specialLeave[employee] && specialLeave[employee].includes(day)) {
                         td.innerHTML = `<strong class="assignment">休假</strong>`;
                         td.setAttribute('data-assigned', "休假");
@@ -688,20 +699,25 @@
         }
 
         // ──────────────────────────────
-        // 更新各員工剩餘上班天數
+        // 更新各員工已排天數 (休假不算一天)
         // ──────────────────────────────
         function updateStaffRemainingDays() {
             const [year, month] = document.getElementById('month').value.split('-').map(Number);
             const daysInMonth = new Date(year, month, 0).getDate();
             const daysOff = Number(document.getElementById('daysOff').value);
+            // 所需上班天數
             const requiredDays = daysInMonth - daysOff;
             let statsHtml = "";
             employees.forEach(employee => {
                 let assignedCount = 0;
                 for (let day = 1; day <= daysInMonth; day++) {
                     const cell = document.querySelector(`td.droppable[data-day='${day}'][data-employee='${employee}']`);
-                    if (cell && cell.getAttribute('data-assigned')) {
-                        assignedCount++;
+                    if (cell) {
+                        const shift = cell.getAttribute('data-assigned');
+                        // 「休假」不算一天
+                        if (shift && shift !== "休假") {
+                            assignedCount++;
+                        }
                     }
                 }
                 const remain = requiredDays - assignedCount;
@@ -711,7 +727,7 @@
         }
 
         // ──────────────────────────────
-        // 建立特別需求日期選項（與排班月份同步）
+        // 建立特別需求日期 (與月份同步)
         // ──────────────────────────────
         function buildDateCheckboxes() {
             const container = document.getElementById('dateCheckboxes');
@@ -722,14 +738,16 @@
                 const dateObj = new Date(year, month - 1, i);
                 const dow = ['日', '一', '二', '三', '四', '五', '六'][dateObj.getDay()];
                 const div = document.createElement('div');
-                div.innerHTML = `<input type="checkbox" id="date-${i}" name="dates" value="${i}">
-                         <label for="date-${i}">${month}/${i} (${dow})</label>`;
+                div.innerHTML = `
+                  <input type="checkbox" id="date-${i}" name="dates" value="${i}">
+                  <label for="date-${i}">${month}/${i} (${dow})</label>
+                `;
                 container.appendChild(div);
             }
         }
 
         // ──────────────────────────────
-        // 匯出排班表為 CSV
+        // 匯出排班表 CSV
         // ──────────────────────────────
         function exportScheduleToCSV() {
             const table = document.getElementById('scheduleTable');
@@ -754,9 +772,7 @@
             document.body.removeChild(link);
         }
 
-        // ──────────────────────────────
-        // 使右側班別卡片可拖曳
-        // ──────────────────────────────
+        // 使右側班別卡可拖曳
         function addDraggableToShiftCards() {
             const shiftCards = document.querySelectorAll('.shift-card');
             shiftCards.forEach(card => {
@@ -768,7 +784,98 @@
         }
 
         // ──────────────────────────────
-        // 初始化：分頁切換與事件註冊
+        // 簡易自動排班 (貪心式示範)
+        // ──────────────────────────────
+        function autoSchedule() {
+            buildScheduleTable();
+            const [year, month] = document.getElementById('month').value.split('-').map(Number);
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const daysOff = Number(document.getElementById('daysOff').value);
+            const requiredDays = daysInMonth - daysOff;
+
+            let assignedDays = {};
+            employees.forEach(emp => assignedDays[emp] = 0);
+
+            // 1. 先排入特別休假
+            for (let day = 1; day <= daysInMonth; day++) {
+                employees.forEach(employee => {
+                    if (specialLeave[employee] && specialLeave[employee].includes(day)) {
+                        const cell = document.querySelector(`td.droppable[data-day='${day}'][data-employee='${employee}']`);
+                        if (cell) setAssignment(cell, employee, "休假", day);
+                    }
+                });
+            }
+
+            // 2. 確保每天至少有 Judy 或 Pei
+            for (let day = 1; day <= daysInMonth; day++) {
+                let hasKeyStaff = employees.some(emp => {
+                    const cell = document.querySelector(`td.droppable[data-day='${day}'][data-employee='${emp}']`);
+                    return ["Judy", "Pei"].includes(emp) && cell && cell.getAttribute('data-assigned') !== "休假";
+                });
+
+                if (!hasKeyStaff) {
+                    for (let emp of["Judy", "Pei"]) {
+                        const cell = document.querySelector(`td.droppable[data-day='${day}'][data-employee='${emp}']`);
+                        if (cell && !cell.getAttribute('data-assigned')) {
+                            setAssignment(cell, emp, "早班", day);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 3. 依據規則分配班別
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateObj = new Date(year, month - 1, day);
+                const dayOfWeek = dateObj.getDay(); // 0:日, 6:六
+                const possibleShifts = dayOfWeek === 0 || dayOfWeek === 6 ? ["早班", "中班", "晚班"] : ["早班", "晚班"];
+
+                let assignedShift = {};
+                employees.sort((a, b) => assignedDays[a] - assignedDays[b]); // 排序，確保分配平均
+                employees.forEach(employee => {
+                    const cell = document.querySelector(`td.droppable[data-day='${day}'][data-employee='${employee}']`);
+                    if (!cell || cell.getAttribute('data-assigned')) return;
+
+                    let allowedShifts = possibleShifts.filter(shift => allowedShiftForEmployee[employee].includes(shift));
+                    allowedShifts.push("休假");
+
+                    for (let shift of allowedShifts) {
+                        if (!assignedShift[shift] && isValidAssignment(employee, shift, day, false)) { // 確保班別唯一
+                            setAssignment(cell, employee, shift, day);
+                            assignedShift[shift] = true;
+                            if (shift !== "休假") assignedDays[employee]++;
+                            break;
+                        }
+                    }
+                });
+            }
+
+            // 4. 確保連續六天後休假，且休假連續兩天
+            for (let day = 1; day <= daysInMonth; day++) {
+                employees.forEach(employee => {
+                    if (!checkMaxConsecutiveDays(employee, day)) {
+                        const cell = document.querySelector(`td.droppable[data-day='${day}'][data-employee='${employee}']`);
+                        if (cell && cell.getAttribute('data-assigned') !== "休假") {
+                            setAssignment(cell, employee, "休假", day);
+                            assignedDays[employee]--;
+                        }
+
+                        const nextDay = day + 1;
+                        if (nextDay <= daysInMonth) {
+                            const nextCell = document.querySelector(`td.droppable[data-day='${nextDay}'][data-employee='${employee}']`);
+                            if (nextCell && !nextCell.getAttribute('data-assigned')) {
+                                setAssignment(nextCell, employee, "休假", nextDay);
+                            }
+                        }
+                    }
+                });
+            }
+
+            updateStaffRemainingDays();
+            alert("優化自動排班完成！（確保每天有 Judy 或 Pei，班別唯一，六日有中班，六天後休假兩天）");
+        }
+        // ──────────────────────────────
+        // 初始化
         // ──────────────────────────────
         document.addEventListener('DOMContentLoaded', function() {
             const tabs = document.querySelectorAll('.tab');
@@ -784,16 +891,25 @@
             addDraggableToShiftCards();
             buildScheduleTable();
             buildDateCheckboxes();
+
+            // 監聽 month 變更
             document.getElementById('month').addEventListener('change', () => {
                 buildScheduleTable();
                 buildDateCheckboxes();
             });
+            // 重置排班表
             document.getElementById('resetSchedule').addEventListener('click', () => {
                 if (confirm('確定要重置排班表？')) buildScheduleTable();
             });
+            // 匯出 CSV
             document.getElementById('exportSchedule').addEventListener('click', () => {
                 exportScheduleToCSV();
             });
+            // 綁定自動排班
+            document.getElementById('autoSchedule').addEventListener('click', () => {
+                autoSchedule();
+            });
+
             // 特別需求表單處理
             document.getElementById('specialRequestForm').addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -819,7 +935,9 @@
                 }
                 if (!specialLeave[staff]) specialLeave[staff] = [];
                 dates.forEach(d => {
-                    if (!specialLeave[staff].includes(d)) specialLeave[staff].push(d);
+                    if (!specialLeave[staff].includes(d)) {
+                        specialLeave[staff].push(d);
+                    }
                 });
                 alert(`已儲存 ${staff} 的特別需求：${dates.join(', ')}`);
                 document.querySelectorAll('input[name="dates"]').forEach(cb => cb.checked = false);
