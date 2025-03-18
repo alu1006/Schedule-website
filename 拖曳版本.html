@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>拖曳式手動排班表 - 完整範例（可重新拖曳、右側固定）</title>
+    <style>
+         :root {
+            --primary-color: #4a6fa5;
+            --secondary-color: #166088;
+            --accent-color: #4fc3dc;
+            --light-color: #f5f5f5;
+            --dark-color: #333;
+            --success-color: #5cb85c;
+            --warning-color: #f0ad4e;
+            --danger-color: #d9534f;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background-color: var(--light-color);
+            color: var(--dark-color);
+        }
+        
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1rem 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .container {
+            width: 95%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem 0;
+        }
+        
+        h1,
+        h2,
+        h3,
+        h4 {
+            margin-bottom: 1rem;
+        }
+        /* 將主要內容與控制面板分成左右兩欄：主內容在左，控制面板在右 */
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        /* 主內容區 */
+        
+        .main-content {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        /* 右側控制面板固定 */
+        
+        .sidebar {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            height: fit-content;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 1rem;
+        }
+        
+        .tab {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            background: #f5f5f5;
+            border-radius: 4px 4px 0 0;
+            margin-right: 0.5rem;
+        }
+        
+        .tab.active {
+            background: white;
+            font-weight: bold;
+            border-bottom: 2px solid var(--primary-color);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        form {
+            margin-bottom: 2rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+        
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        
+        button,
+        .btn {
+            display: inline-block;
+            background: var(--primary-color);
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+        
+        button:hover,
+        .btn:hover {
+            background: var(--secondary-color);
+        }
+        
+        .btn-secondary {
+            background: var(--accent-color);
+        }
+        
+        .btn-success {
+            background: var(--success-color);
+        }
+        
+        .btn-warning {
+            background: var(--warning-color);
+        }
+        
+        .btn-danger {
+            background: var(--danger-color);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+            overflow-x: auto;
+            display: block;
+        }
+        
+        th,
+        td {
+            padding: 0.75rem;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: var(--primary-color);
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        /* 週末列著色（僅視覺效果，不影響演算法） */
+        
+        .weekend {
+            background-color: #e6f2ff;
+        }
+        
+        .staff-list {
+            margin-bottom: 2rem;
+        }
+        
+        .staff-card {
+            background: white;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 4px;
+            border-left: 3px solid var(--primary-color);
+            cursor: grab;
+        }
+        
+        .staff-card:active {
+            cursor: grabbing;
+        }
+        
+        .staff-stats {
+            font-size: 0.85rem;
+            color: var(--warning-color);
+            margin-top: 0.3rem;
+        }
+        /* 排班表內可拖曳區 */
+        
+        .droppable {
+            min-height: 40px;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .droppable.drag-over {
+            outline: 2px dashed var(--accent-color);
+        }
+        /* 候選文字：點選後可直接加入 */
+        
+        .suggestion.candidate {
+            font-size: 0.85rem;
+            color: var(--warning-color);
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        /* 已指派元素（可重新拖曳） */
+        
+        .assignment {
+            cursor: grab;
+        }
+        /* 若違反隔天早晚接班規則，呈現紅字 */
+        
+        .red-assignment {
+            color: red;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            header h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <h1>拖曳式手動排班表</h1>
+        </div>
+    </header>
+    <!-- 主要區域：將主內容放左側，控制面板放右側 -->
+    <div class="container">
+        <div class="dashboard">
+            <!-- 主內容 -->
+            <div class="main-content">
+                <div class="tabs">
+                    <div class="tab active" data-tab="schedule">排班表</div>
+                    <div class="tab" data-tab="special-requests">特別需求</div>
+                    <div class="tab" data-tab="statistics">統計資料</div>
+                </div>
+                <!-- 排班表分頁 -->
+                <div class="tab-content active" id="schedule">
+                    <h2 id="scheduleTitle">排班表</h2>
+                    <div style="overflow-x: auto;">
+                        <table id="scheduleTable">
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>星期</th>
+                                    <th>早班<br>(7:00-16:00)</th>
+                                    <th>中班<br>(10:00-19:00)</th>
+                                    <th>晚班<br>(14:00-23:00)</th>
+                                    <th>夜班<br>(22:30-07:30)</th>
+                                    <th>備註</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- 排班表列由程式動態產生 -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="buttons">
+                        <button id="exportSchedule" class="btn">匯出排班表</button>
+                    </div>
+                </div>
+                <!-- 特別需求分頁 -->
+                <div class="tab-content" id="special-requests">
+                    <h2>特別休假需求</h2>
+                    <form id="specialRequestForm">
+                        <div class="form-group">
+                            <label for="staffSelect">員工:</label>
+                            <select id="staffSelect">
+                <option value="Judy">Judy</option>
+                <option value="Pei">Pei</option>
+                <option value="Luna">Luna</option>
+                <option value="Claire">Claire</option>
+                <option value="Risky">Risky</option>
+              </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="requestDates">請假日期 (可複選):</label>
+                            <div style="height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;">
+                                <div id="dateCheckboxes">
+                                    <!-- 日期選項由程式動態產生 -->
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">儲存特別需求</button>
+                    </form>
+                    <div style="margin-top: 20px;">
+                        <h3>目前特別需求:</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>員工</th>
+                                    <th>請假日期</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Judy</td>
+                                    <td>4/11, 4/23</td>
+                                    <td><button class="btn btn-danger btn-sm">刪除</button></td>
+                                </tr>
+                                <tr>
+                                    <td>Pei</td>
+                                    <td>4/3, 4/6, 4/7</td>
+                                    <td><button class="btn btn-danger btn-sm">刪除</button></td>
+                                </tr>
+                                <tr>
+                                    <td>Luna</td>
+                                    <td>4/12, 4/13</td>
+                                    <td><button class="btn btn-danger btn-sm">刪除</button></td>
+                                </tr>
+                                <tr>
+                                    <td>Claire</td>
+                                    <td>4/4, 4/5, 4/14</td>
+                                    <td><button class="btn btn-danger btn-sm">刪除</button></td>
+                                </tr>
+                                <tr>
+                                    <td>Risky</td>
+                                    <td>4/1, 4/11, 4/12, 4/27</td>
+                                    <td><button class="btn btn-danger btn-sm">刪除</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- 統計資料分頁 (示範畫面) -->
+                <div class="tab-content" id="statistics">
+                    <h2>統計資料</h2>
+                    <h3>休假統計</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>員工</th>
+                                <th>總排休天數</th>
+                                <th>特別需求</th>
+                                <th>系統安排</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Judy</td>
+                                <td>10天</td>
+                                <td>2天</td>
+                                <td>8天</td>
+                            </tr>
+                            <tr>
+                                <td>Pei</td>
+                                <td>10天</td>
+                                <td>3天</td>
+                                <td>7天</td>
+                            </tr>
+                            <tr>
+                                <td>Luna</td>
+                                <td>10天</td>
+                                <td>1天</td>
+                                <td>9天</td>
+                            </tr>
+                            <tr>
+                                <td>Claire</td>
+                                <td>10天</td>
+                                <td>3天</td>
+                                <td>7天</td>
+                            </tr>
+                            <tr>
+                                <td>Risky</td>
+                                <td>10天</td>
+                                <td>4天</td>
+                                <td>6天</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <h3>班別統計</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>員工</th>
+                                <th>早班</th>
+                                <th>中班</th>
+                                <th>晚班</th>
+                                <th>夜班</th>
+                                <th>總班數</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Judy</td>
+                                <td>0</td>
+                                <td>10</td>
+                                <td>11</td>
+                                <td>0</td>
+                                <td>21</td>
+                            </tr>
+                            <tr>
+                                <td>Pei</td>
+                                <td>0</td>
+                                <td>8</td>
+                                <td>3</td>
+                                <td>0</td>
+                                <td>11</td>
+                            </tr>
+                            <tr>
+                                <td>Luna</td>
+                                <td>0</td>
+                                <td>0</td>
+                                <td>21</td>
+                                <td>0</td>
+                                <td>21</td>
+                            </tr>
+                            <tr>
+                                <td>Claire</td>
+                                <td>21</td>
+                                <td>0</td>
+                                <td>0</td>
+                                <td>0</td>
+                                <td>21</td>
+                            </tr>
+                            <tr>
+                                <td>Risky</td>
+                                <td>0</td>
+                                <td>0</td>
+                                <td>0</td>
+                                <td>21</td>
+                                <td>21</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- 右側控制面板（固定、sticky） -->
+            <div class="sidebar">
+                <h2>控制面板</h2>
+                <div class="staff-list">
+                    <h3>櫃檯同仁</h3>
+                    <div class="staff-card" draggable="true" data-name="Judy">
+                        <h4>Judy</h4>
+                        <p>早、中、晚班皆可排</p>
+                        <p class="staff-stats" id="Judy-stats-side"></p>
+                    </div>
+                    <div class="staff-card" draggable="true" data-name="Pei">
+                        <h4>Pei</h4>
+                        <p>早、中、晚班皆可排</p>
+                        <p class="staff-stats" id="Pei-stats-side"></p>
+                    </div>
+                    <div class="staff-card" draggable="true" data-name="Luna">
+                        <h4>Luna</h4>
+                        <p>只安排晚班</p>
+                        <p class="staff-stats" id="Luna-stats-side"></p>
+                    </div>
+                    <div class="staff-card" draggable="true" data-name="Claire">
+                        <h4>Claire</h4>
+                        <p>只安排早班</p>
+                        <p class="staff-stats" id="Claire-stats-side"></p>
+                    </div>
+                    <div class="staff-card" draggable="true" data-name="Risky">
+                        <h4>Risky</h4>
+                        <p>只安排夜班</p>
+                        <p class="staff-stats" id="Risky-stats-side"></p>
+                    </div>
+                </div>
+                <h3>排班規則設定</h3>
+                <form id="rulesForm">
+                    <div class="form-group">
+                        <label for="daysOff">每月排休天數:</label>
+                        <input type="number" id="daysOff" value="10" min="0" max="31" />
+                    </div>
+                    <div class="form-group">
+                        <label for="maxConsecutiveWork">最多連續上班天數:</label>
+                        <input type="number" id="maxConsecutiveWork" value="6" min="1" max="31" disabled />
+                    </div>
+                    <div class="form-group">
+                        <label for="month">排班月份:</label>
+                        <input type="month" id="month" value="2025-04">
+                    </div>
+                    <button type="button" class="btn" id="resetSchedule">重置排班表</button>
+                </form>
+                <h3>其他功能</h3>
+                <button class="btn btn-secondary" id="gotoSpecialRequests">特別需求</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        // (1) 特別需求與允許排班資料（示範寫死）
+        // 規定：Judy 與 Pei 不能同時休假
+        let specialLeave = {
+            "Judy": [11, 23],
+            "Pei": [3, 6, 7],
+            "Luna": [12, 13],
+            "Claire": [4, 5, 14],
+            "Risky": [1, 11, 12, 27]
+        };
+        const allowedShifts = {
+            "早班": ["Judy", "Pei", "Claire"],
+            "中班": ["Judy", "Pei"],
+            "晚班": ["Judy", "Pei", "Luna"],
+            "夜班": ["Risky"]
+        };
+        // 員工可排班別數量（數值越小，表示較不靈活，排序時優先安排）
+        const employeeAllowedShifts = {
+            "Judy": 3,
+            "Pei": 3,
+            "Luna": 1,
+            "Claire": 1,
+            "Risky": 1
+        };
+        const MAX_CONSECUTIVE = 6;
+
+        // (2) 判斷是否可排於特定日期的特定班別
+        function isValidAssignment(staffName, shift, day) {
+            if (isStaffAssignedOnDay(staffName, day)) return false;
+            if (!allowedShifts[shift].includes(staffName)) return false;
+            if (specialLeave[staffName] && specialLeave[staffName].includes(day)) return false;
+            if (!checkMaxConsecutiveDays(staffName, day)) return false;
+            return true;
+        }
+
+        function checkMaxConsecutiveDays(staffName, day) {
+            let consecutive = 1;
+            for (let d = day - 1; d >= 1; d--) {
+                if (isStaffAssignedOnDay(staffName, d)) {
+                    consecutive++;
+                    if (consecutive > MAX_CONSECUTIVE) return false;
+                } else break;
+            }
+            return true;
+        }
+
+        function isStaffAssignedOnDay(staffName, day) {
+            const row = document.querySelectorAll('#scheduleTable tbody tr')[day - 1];
+            if (!row) return false;
+            const cells = row.querySelectorAll('td[data-shift]');
+            for (let cell of cells) {
+                if (cell.getAttribute('data-assigned') === staffName) return true;
+            }
+            return false;
+        }
+
+        // (3) 檢查早晚接班規則（隔天早班接晚班、隔天晚班接早班）
+        function violatesShiftTransition(staffName, shift, day) {
+            if (day > 1) {
+                const prevRow = document.querySelectorAll('#scheduleTable tbody tr')[day - 2];
+                if (prevRow) {
+                    if (shift === "早班") {
+                        const lateCell = prevRow.querySelector('td[data-shift="晚班"]');
+                        if (lateCell && lateCell.getAttribute('data-assigned') === staffName) return true;
+                    }
+                    if (shift === "晚班") {
+                        const earlyCell = prevRow.querySelector('td[data-shift="早班"]');
+                        if (earlyCell && earlyCell.getAttribute('data-assigned') === staffName) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // (4) 取得候選人清單，依 employeeAllowedShifts 由小到大排序
+        function getAvailableStaff(shift, day) {
+            let candidates = allowedShifts[shift] || [];
+            candidates = candidates.filter(name => {
+                if (specialLeave[name] && specialLeave[name].includes(day)) return false;
+                if (isStaffAssignedOnDay(name, day)) return false;
+                if (violatesShiftTransition(name, shift, day)) return false;
+                return true;
+            });
+            candidates.sort((a, b) => employeeAllowedShifts[a] - employeeAllowedShifts[b]);
+            return candidates;
+        }
+
+        // (5) 建立排班表，週末著色，備註欄顯示當天休假人員
+        function buildScheduleTable() {
+            const [year, month] = document.getElementById('month').value.split('-').map(Number);
+            const daysInMonth = new Date(year, month, 0).getDate();
+            document.getElementById('scheduleTitle').innerText = `${month} 月排班表`;
+            const tbody = document.querySelector('#scheduleTable tbody');
+            tbody.innerHTML = '';
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateObj = new Date(year, month - 1, day);
+                const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][dateObj.getDay()];
+                const offStaffs = getDayOffStaff(day);
+                const tr = document.createElement('tr');
+                if (dayOfWeek === '六' || dayOfWeek === '日') {
+                    tr.classList.add('weekend');
+                }
+                tr.innerHTML = `
+          <td>${month}/${day}</td>
+          <td>${dayOfWeek}</td>
+          <td class="droppable" data-shift="早班" data-day="${day}"></td>
+          <td class="droppable" data-shift="中班" data-day="${day}"></td>
+          <td class="droppable" data-shift="晚班" data-day="${day}"></td>
+          <td class="droppable" data-shift="夜班" data-day="${day}"></td>
+          <td contenteditable="true">${offStaffs.length ? '休假: ' + offStaffs.join(', ') : ''}</td>
+        `;
+                tbody.appendChild(tr);
+            }
+            updateAllSuggestions();
+            addDroppableListeners();
+            updateStaffRemainingDays();
+        }
+
+        function getDayOffStaff(day) {
+            let result = [];
+            Object.keys(specialLeave).forEach(name => {
+                if (specialLeave[name].includes(day)) result.push(name);
+            });
+            return result;
+        }
+
+        // (6) 更新候選提示，候選文字設定點選即可加入
+        function updateAllSuggestions() {
+            const cells = document.querySelectorAll('.droppable');
+            cells.forEach(cell => {
+                if (cell.getAttribute('data-assigned')) return;
+                const shift = cell.getAttribute('data-shift');
+                const day = parseInt(cell.getAttribute('data-day'));
+                const candidates = getAvailableStaff(shift, day);
+                if (candidates.length > 0) {
+                    cell.innerHTML = `<span class="suggestion candidate" data-candidate="${candidates[0]}">候選: ${candidates[0]}</span>`;
+                } else {
+                    cell.innerHTML = `<span class="suggestion">無可排員工</span>`;
+                }
+            });
+        }
+
+        // (7) 建立一個函式設定指派，包含設定 draggable 的 assignment 元素
+        function setAssignment(cell, staff, shift, day) {
+            cell.innerHTML = `<strong draggable="true" class="assignment">${staff}</strong>`;
+            cell.setAttribute('data-assigned', staff);
+            let assignmentEl = cell.querySelector('.assignment');
+            assignmentEl.addEventListener('dragstart', function(e) {
+                // 當拖曳開始，清除原本的指派
+                cell.removeAttribute('data-assigned');
+                // 稍後更新候選提示
+                setTimeout(updateAllSuggestions, 0);
+                e.dataTransfer.setData("text/plain", staff);
+            });
+            if (violatesShiftTransition(staff, shift, day)) {
+                cell.classList.add('red-assignment');
+            } else {
+                cell.classList.remove('red-assignment');
+            }
+        }
+
+        // (8) 為每個 droppable 區加入拖放事件
+        function addDroppableListeners() {
+            const cells = document.querySelectorAll('.droppable');
+            cells.forEach(cell => {
+                cell.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    cell.classList.add('drag-over');
+                });
+                cell.addEventListener('dragleave', () => {
+                    cell.classList.remove('drag-over');
+                });
+                cell.addEventListener('drop', e => {
+                    e.preventDefault();
+                    cell.classList.remove('drag-over');
+                    const staff = e.dataTransfer.getData("text/plain");
+                    const shift = cell.getAttribute('data-shift');
+                    const day = parseInt(cell.getAttribute('data-day'));
+                    if (!isValidAssignment(staff, shift, day)) {
+                        alert(`無法排入：${staff}\n(1) 同天已排過\n(2) 不符合班別或休假\n(3) 已連上 6 天，不能排第 7 天。`);
+                        return;
+                    }
+                    setAssignment(cell, staff, shift, day);
+                    updateAllSuggestions();
+                    updateStaffRemainingDays();
+                });
+                cell.addEventListener('dblclick', () => {
+                    cell.removeAttribute('data-assigned');
+                    cell.classList.remove('red-assignment');
+                    cell.innerHTML = '';
+                    updateAllSuggestions();
+                    updateStaffRemainingDays();
+                });
+            });
+        }
+
+        // (9) 讓員工卡可拖曳
+        function addDraggableToStaffCards() {
+            const cards = document.querySelectorAll('.staff-card');
+            cards.forEach(card => {
+                card.addEventListener('dragstart', e => {
+                    const staff = card.getAttribute('data-name');
+                    e.dataTransfer.setData("text/plain", staff);
+                });
+            });
+        }
+
+        // (10) 點選候選人直接加入
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('candidate')) {
+                const staff = e.target.getAttribute('data-candidate');
+                const cell = e.target.closest('td.droppable');
+                if (!cell) return;
+                const shift = cell.getAttribute('data-shift');
+                const day = parseInt(cell.getAttribute('data-day'));
+                if (!isValidAssignment(staff, shift, day)) {
+                    alert(`無法排入：${staff}`);
+                    return;
+                }
+                setAssignment(cell, staff, shift, day);
+                updateAllSuggestions();
+                updateStaffRemainingDays();
+            }
+        });
+
+        // (11) 更新各員工剩餘天數
+        // 需上班天數 = 當月天數 - 每月排休天數（由表單提供）
+        function updateStaffRemainingDays() {
+            const [year, month] = document.getElementById('month').value.split('-').map(Number);
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const daysOff = Number(document.getElementById('daysOff').value);
+            const requiredDays = daysInMonth - daysOff;
+            let assignedDays = {
+                "Judy": 0,
+                "Pei": 0,
+                "Luna": 0,
+                "Claire": 0,
+                "Risky": 0
+            };
+            for (let d = 1; d <= daysInMonth; d++) {
+                const row = document.querySelectorAll('#scheduleTable tbody tr')[d - 1];
+                if (!row) continue;
+                const cells = row.querySelectorAll('td[data-shift]');
+                let setAssigned = new Set();
+                cells.forEach(cell => {
+                    const n = cell.getAttribute('data-assigned');
+                    if (n) setAssigned.add(n);
+                });
+                setAssigned.forEach(n => {
+                    if (assignedDays[n] !== undefined) assignedDays[n]++;
+                });
+            }
+            ["Judy", "Pei", "Luna", "Claire", "Risky"].forEach(name => {
+                const remain = requiredDays - assignedDays[name];
+                // 同時更新右側控制面板上的統計
+                const statsElMain = document.getElementById(`${name}-stats`);
+                const statsElSide = document.getElementById(`${name}-stats-side`);
+                const text = `已排: ${assignedDays[name]} / ${requiredDays}，剩餘: ${remain} 天`;
+                if (statsElMain) statsElMain.textContent = text;
+                if (statsElSide) statsElSide.textContent = text;
+            });
+        }
+
+        // (12) 產生特別需求的日期選項（與月份同步）
+        function buildDateCheckboxes() {
+            const container = document.getElementById('dateCheckboxes');
+            if (!container) return;
+            container.innerHTML = '';
+            const [year, month] = document.getElementById('month').value.split('-').map(Number);
+            const daysInMonth = new Date(year, month, 0).getDate();
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateObj = new Date(year, month - 1, i);
+                const dow = ['日', '一', '二', '三', '四', '五', '六'][dateObj.getDay()];
+                const div = document.createElement('div');
+                div.innerHTML = `
+          <input type="checkbox" id="date-${i}" name="dates" value="${i}">
+          <label for="date-${i}">${month}/${i} (${dow})</label>
+        `;
+                container.appendChild(div);
+            }
+        }
+
+        // (13) 特別需求：檢查 Judy 與 Pei 不能同時休假（表單提交時）
+        function canJudyAndPeiBeOff(staff, dates) {
+            if (staff === "Judy") {
+                const conflict = dates.find(d => specialLeave["Pei"] && specialLeave["Pei"].includes(d));
+                if (conflict !== undefined) {
+                    alert(`Judy 與 Pei 不能同時休假，與 Pei 的休假日 (${conflict}) 衝突！`);
+                    return false;
+                }
+            } else if (staff === "Pei") {
+                const conflict = dates.find(d => specialLeave["Judy"] && specialLeave["Judy"].includes(d));
+                if (conflict !== undefined) {
+                    alert(`Judy 與 Pei 不能同時休假，與 Judy 的休假日 (${conflict}) 衝突！`);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // (14) 初始化：分頁切換、事件註冊等
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    const id = tab.getAttribute('data-tab');
+                    document.getElementById(id).classList.add('active');
+                });
+            });
+            document.getElementById('gotoSpecialRequests').addEventListener('click', function() {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.querySelector('.tab[data-tab="special-requests"]').classList.add('active');
+                document.getElementById('special-requests').classList.add('active');
+            });
+            addDraggableToStaffCards();
+            buildScheduleTable();
+            buildDateCheckboxes();
+            document.getElementById('month').addEventListener('change', () => {
+                buildScheduleTable();
+                buildDateCheckboxes();
+            });
+            const specialRequestForm = document.getElementById('specialRequestForm');
+            specialRequestForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const staff = document.getElementById('staffSelect').value;
+                const dates = Array.from(document.querySelectorAll('input[name="dates"]:checked')).map(cb => Number(cb.value));
+                if (dates.length === 0) {
+                    alert('請選擇至少一個日期');
+                    return;
+                }
+                if (!canJudyAndPeiBeOff(staff, dates)) return;
+                if (!specialLeave[staff]) specialLeave[staff] = [];
+                dates.forEach(d => {
+                    if (!specialLeave[staff].includes(d)) specialLeave[staff].push(d);
+                });
+                alert(`已儲存 ${staff} 的特別需求:\n請假日期: ${dates.join(', ')}`);
+                document.querySelectorAll('input[name="dates"]').forEach(cb => cb.checked = false);
+                updateAllSuggestions();
+                updateStaffRemainingDays();
+            });
+            document.getElementById('resetSchedule').addEventListener('click', () => {
+                if (confirm('確定要重置排班表？')) buildScheduleTable();
+            });
+            document.getElementById('exportSchedule').addEventListener('click', () => {
+                const format = prompt('請選擇匯出格式 (excel, csv, pdf):', 'excel');
+                if (format) alert(`排班表將以 ${format} 格式匯出 (示範)`);
+            });
+        });
+    </script>
+</body>
+
+</html>
